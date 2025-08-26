@@ -9,7 +9,7 @@
     html, body {
       margin: 0;
       padding: 40px;
-      overflow: hidden;
+      overflow: auto;
       background: #000;
       color: #d4af37;
       font-family: 'serif';
@@ -117,8 +117,12 @@
       align-items: center;
     }
 </style>
+
 </head>
 <body>
+<!-- Place this tag where you want the button to render. -->
+<a class="github-button" href="https://github.com/robschmidtdev/krellpatch/" data-color-scheme="no-preference: light; light: light; dark: dark;" data-size="large" aria-label="Watch robschmidtdev/krallpatch on GitHub">Watch</a>
+
   <p>
       <b>The Krell Patch</b> ~ is a classic example of a generative synth patch — meaning it creates music or sound textures that evolve and change on their own.<br/>
       It was originally designed to generate rich, otherworldly sounds automatically, inspired by the eerie sci-fi sounds from the 1950s movie “Forbidden Planet.”<br/>
@@ -156,10 +160,13 @@
   </div>
 
   <div class="control-item">
-    <label for="distortion">Distortion</label>
-    <div class="knob" id="distortion"></div>
+    <label for="reverb">Reverb/Delay</label>
+    <div class="knob" id="reverb"></div>
   </div>
 </div>
+
+<!-- Place this tag in your head or just before your close body tag. -->
+
 
   <script>
 
@@ -174,104 +181,136 @@
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
 
+    // CONTROLS
+    // volume
+
     let masterVol
     let masterVolInit = -20
 
-    document.getElementById("start").addEventListener("click", async () => {
-      
-      await Tone.start();
-      console.log("Audio Started");
+    // scale & pitch
+    const scale = ["C3", "D3", "Eb3", "G3", "A3", "Bb3", "C4", "D4", "Eb4", "Bb4", "C5", "D5", "Eb5"];
+    let pitchSpread = 13;
 
-      // ANALYSER & VISUALIZER SETUP
-      const analyser = new Tone.Analyser("waveform", 512);
+    let currentNoteRange = [];
 
-      // EFFECTS CHAIN
-      const reverb = new Tone.Reverb({ decay: 8, wet: 0.5 });
-      const pingPong = new Tone.PingPongDelay("8n", 0.8);
-      const stereo = new Tone.StereoWidener(0.5);
-      const distortion = new Tone.Distortion(0.8); //TODO auch als dial 
-      masterVol = new Tone.Volume(masterVolInit);
-      masterVol.chain(stereo, distortion, pingPong, reverb, analyser, Tone.Destination);
+    function updateNoteRange() {
+      const base = 2;
+      const start = Math.max(0, base);
+      const end = Math.min(scale.length - 1, base + pitchSpread - 1);
+      currentNoteRange = scale.slice(start, end + 1);
+    }
+    updateNoteRange();
 
-      // NOISE
-      const noise = new Tone.Noise("pink").start();
-      const noiseVol = new Tone.Volume(-40);
-      const filter = new Tone.Filter({ frequency: 500, Q: 1, type: "lowpass" });
-      const panner = new Tone.Panner(0);
-      noise.chain(noiseVol, filter, panner, masterVol);
-
-      // VOICE 1
-      const synth1 = new Tone.Synth({
-        oscillator: { type: "sine" },
-        envelope: { attack: 2, decay: 1, sustain: 0.3, release: 4 }
-      });
-      const filter1 = new Tone.Filter({ frequency: 500, Q: 1, type: "lowpass" });
-      const panner1 = new Tone.Panner(0);
-      synth1.chain(filter1, panner1, masterVol);
-
-      // VOICE 2
-      const synth2 = new Tone.FMSynth({
-        modulationIndex: 5,
-        harmonicity: 2,
-        envelope: { attack: 0.5, decay: 1.5, sustain: 0.2, release: 3 },
-        modulationEnvelope: { attack: 0.2, decay: 0.3, sustain: 0.9, release: 1.2 }
-      });
-      const filter2 = new Tone.Filter({ frequency: 1000, Q: 2, type: "bandpass" });
-      const panner2 = new Tone.Panner(0);
-      synth2.chain(filter2, panner2, masterVol);
-
-      // LFOs
-      const panLFO1 = new Tone.LFO("0.05Hz", -0.7, 0.7).connect(panner1.pan).start();
-      const panLFO2 = new Tone.LFO("0.03Hz", -0.5, 0.5).connect(panner2.pan).start();
-      const panLFO3 = new Tone.LFO("0.04Hz", -0.3, 0.3).connect(panner.pan).start();
-      const filterLFO1 = new Tone.LFO("0.01Hz", 200, 1200).connect(filter1.frequency).start();
-      const filterLFO2 = new Tone.LFO("0.008Hz", 500, 3000).connect(filter2.frequency).start();
-      const filterLFO3 = new Tone.LFO("0.5Hz", 200, 3000).connect(filter.frequency).start();
-
-      // SCALE & PITCH
-      const scale = ["C3", "D3", "Eb3", "G3", "A3", "Bb3", "C4", "D4", "Eb4", "Bb4", "C5", "D5", "Eb5"];
-      let pitchSpread = 13;
-
-      let currentNoteRange = [];
-
-      function updateNoteRange() {
-        const base = 2;
-        const start = Math.max(0, base);
-        const end = Math.min(scale.length - 1, base + pitchSpread - 1);
-        currentNoteRange = scale.slice(start, end + 1);
-      }
+    function setPitchSpread(newSpread) {
+      pitchSpread = Math.min(newSpread, scale.length);
       updateNoteRange();
+    }
 
-      function triggerVoice(synth, time) {
-        const note = currentNoteRange[Math.floor(Math.random() * currentNoteRange.length)];
+    // attack release spread
+    let attackReleaseSpread = 1.5;
 
-        const duration = Math.random() * 2 + 1;
-        synth.envelope.attack = Math.random() * 2 + 0.5; // TODO one control here, narrowness inkl. 0 am Ende
-        synth.envelope.release = Math.random() * 4 + 1; // TODO same control here
+    let cycleSpread = 5
 
-        synth.triggerAttackRelease(note, duration, time);
+    let noiseVol
+    let noiseVolInit = -30
+
+    let reverbDelayInit = 0.5
+    let reverb, pingPong
+
+    let isPlaying = false; 
+    let loop1 = null
+    let loop2 = null
+    let noise = null
+
+    const button = document.getElementById("start");
+
+    button.addEventListener("click", async () => {
+      if (!isPlaying) {
+        isPlaying = true;
+        button.innerText = "Stop";
+
+        await Tone.start();
+        console.log("Audio Started");
+
+        // ANALYSER & VISUALIZER SETUP
+        analyser = new Tone.Analyser("waveform", 512);
+
+        // EFFECTS CHAIN
+        reverb = new Tone.Reverb({ decay: 8, wet: 0.5 });
+        pingPong = new Tone.PingPongDelay("8n", 0.5);
+        const stereo = new Tone.StereoWidener(0.8);
+        masterVol = new Tone.Volume(masterVolInit);
+        masterVol.chain(stereo, pingPong, reverb, analyser, Tone.Destination);
+
+        // NOISE
+        noise = new Tone.Noise("pink") //.start();
+        noiseVol = new Tone.Volume(noiseVolInit);
+        const filter = new Tone.Filter({ frequency: 500, Q: 1, type: "lowpass" });
+        const panner = new Tone.Panner(0);
+        noise.chain(noiseVol, filter, panner, masterVol);
+        noise.start();
+        noiseVol.mute = true
+
+        // VOICE 1
+        const synth1 = new Tone.Synth({
+          oscillator: { type: "sine" },
+          envelope: { attack: 2, decay: 1, sustain: 0.3, release: 4 }
+        });
+        const filter1 = new Tone.Filter({ frequency: 500, Q: 1, type: "lowpass" });
+        const panner1 = new Tone.Panner(0);
+        synth1.chain(filter1, panner1, masterVol);
+
+        // VOICE 2
+        const synth2 = new Tone.FMSynth({
+          modulationIndex: 5,
+          harmonicity: 2,
+          envelope: { attack: 0.5, decay: 1.5, sustain: 0.2, release: 3 },
+          modulationEnvelope: { attack: 0.2, decay: 0.3, sustain: 0.9, release: 1.2 }
+        });
+        const filter2 = new Tone.Filter({ frequency: 1000, Q: 2, type: "bandpass" });
+        const panner2 = new Tone.Panner(0);
+        synth2.chain(filter2, panner2, masterVol);
+
+        // LFOs
+        new Tone.LFO("0.05Hz", -0.7, 0.7).connect(panner1.pan).start();
+        new Tone.LFO("0.03Hz", -0.5, 0.5).connect(panner2.pan).start();
+        new Tone.LFO("0.04Hz", -0.3, 0.3).connect(panner.pan).start();
+        new Tone.LFO("0.01Hz", 200, 1200).connect(filter1.frequency).start();
+        new Tone.LFO("0.008Hz", 500, 3000).connect(filter2.frequency).start();
+        new Tone.LFO("0.5Hz", 200, 3000).connect(filter.frequency).start();
+
+        function triggerVoice(synth, time) {
+          const note = currentNoteRange[Math.floor(Math.random() * currentNoteRange.length)];
+          const duration = Math.random() * 2 + 1;
+          synth.envelope.attack = Math.random() * attackReleaseSpread;
+          synth.envelope.release = Math.random() * attackReleaseSpread;
+          synth.triggerAttackRelease(note, duration, time);
+        }
+
+        loop1 = new Tone.Loop((time) => {
+          triggerVoice(synth1, time);
+          loop1.interval = Math.random() * cycleSpread;
+        }, 4).start(0);
+
+        loop2 = new Tone.Loop((time) => {
+          triggerVoice(synth2, time);
+          loop2.interval = Math.random() * cycleSpread;
+        }, 2).start(1);
+
+        Tone.Transport.start();
+        draw(); // start your visualizer
+      } else {
+        console.log("Audio Stopped");
+        isPlaying = false;
+        button.innerText = "Start";
+
+        Tone.Transport.stop();
+        if (loop1) loop1.stop();
+        if (loop2) loop2.stop();
+        if (noise) noise.stop()
       }
-
-      function setPitchSpread(newSpread) {
-        pitchSpread = Math.min(newSpread, scale.length);
-        updateNoteRange();
-      }
-
-      const loop1 = new Tone.Loop((time) => {
-        triggerVoice(synth1, time);
-        loop1.interval = Math.random() * 3 + 2; // TODO control here spread  
-      }, 4).start(0);
-
-      const loop2 = new Tone.Loop((time) => {
-        triggerVoice(synth2, time);
-        loop2.interval = Math.random() * 3 + 2; // TODO control here spread
-      }, 2).start(1);
-
-      // START AUDIO
-      Tone.Transport.start();
 
       // VISUALIZER DRAWING
-
 
       function draw() {
         requestAnimationFrame(draw);
@@ -337,10 +376,10 @@
       let dial2 = new Knob({
         size: "large",
         type: "LittlePhatty",
-        id: "noise",
-        lowVal: -60,
-        highVal: 0,
-        value: -6,
+        id: "pitch",
+        lowVal: 1,
+        highVal: 13,
+        value: 10,
         sensitivity: 0.3,
         label: false
       });
@@ -348,10 +387,10 @@
       let dial3 = new Knob({
         size: "large",
         type: "LittlePhatty",
-        id: "distortion",
-        lowVal: -60,
-        highVal: 0,
-        value: -6,
+        id: "attack",
+        lowVal: 0,
+        highVal: 30,
+        value: 30,
         sensitivity: 0.3,
         label: false
       });
@@ -359,21 +398,10 @@
       let dial4 = new Knob({
         size: "large",
         type: "LittlePhatty",
-        id: "attack",
-        lowVal: -60,
-        highVal: 0,
-        value: -6,
-        sensitivity: 0.3,
-        label: false
-      });
-
-      let dial5 = new Knob({
-        size: "large",
-        type: "LittlePhatty",
-        id: "pitch",
-        lowVal: -60,
-        highVal: 0,
-        value: -6,
+        id: "cycle",
+        lowVal: 0.5,
+        highVal: 50,
+        value: 50,
         sensitivity: 0.3,
         label: false
       });
@@ -381,27 +409,49 @@
       let dial6 = new Knob({
         size: "large",
         type: "LittlePhatty",
-        id: "cycle",
+        id: "noise",
         lowVal: -60,
         highVal: 0,
-        value: -6,
+        value: -30,
         sensitivity: 0.3,
         label: false
       });
 
 
-     function knobChanged(id, val) {
-        console.log(`knob with ID: ${id} change to ${val}`);
-        if (id == 'knob1') {
-          masterVol.volume.value = parseFloat(val);
-          console.log(masterVol)
-        }
+       let dial5 = new Knob({
+        size: "large",
+        type: "LittlePhatty",
+        id: "reverb",
+        lowVal: 0,
+        highVal: 10,
+        value: 5,
+        sensitivity: 0.3,
+        label: false
+      });
 
-      // else if (id == knob2) {
-      //   ..do something else
-      // }  
+     function knobChanged(id, val) {
+        if (id == 'volume') {
+          masterVol.volume.value = parseFloat(val);
+        }
+        if (id == 'pitch') {
+          setPitchSpread(val)
+        }
+        if (id == 'attack') {
+          attackReleaseSpread = parseFloat(val/10);
+        }
+        if (id == 'cycle') {
+          cycleSpread = parseFloat(val/10);
+        }
+        if (id == 'noise') {
+          noiseVol.volume.value = parseFloat(val);
+        }
+        if (id == 'reverb') {
+          reverb.wet.value = parseFloat(val/10);
+          pingPong.wet.value = parseFloat(val/10);
+        }
       }
 
   </script>
+  <script async defer src="https://buttons.github.io/buttons.js"></script>
 </body>
 </html>
