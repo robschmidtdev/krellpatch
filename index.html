@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>The Krell Patch</title>
+  <script src="https://unpkg.com/tone"></script>
+  <script src="https://colinbd.github.io/JSAudioKnobs/knobs.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 40px;
+      overflow: hidden;
+      background: #000;
+      color: #d4af37;
+      font-family: 'serif';
+      line-height: 1.6;
+    }
+    p {
+      font-size: 1.2rem;
+      max-width: 700px;
+      margin: auto;
+      text-shadow: 1px 1px 2px rgba(212, 175, 55, 0.7);
+      position: relative;
+      z-index: 1;
+    }
+
+    b {
+      font-weight: 700;
+      font-size: 1.6rem;
+      display: block;
+      margin-top: 0.5em;
+      margin-bottom: 0.5em;
+      text-shadow: 2px 2px 4px rgba(212, 175, 55, 0.9);
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+    }
+    label {
+      display: block;
+      margin: 1em 0 0.2em;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+    #controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center; 
+    }
+    #start {
+      display: block;
+      margin: 2rem auto 3rem auto;
+    }
+      .knob {
+      position: relative !important;
+      display: block;
+      margin-top: 0.5em;
+      margin-bottom: 0.5em;
+      clear: both;
+    }
+    button {
+      font-size: 1.2em;
+      padding: 0.5em 1.5em;
+      margin-top: 1.5em;
+      margin-bottom: 1.5em;
+      position: relative;
+      z-index: 10;
+      
+      background: linear-gradient(145deg, #d4af37, #b8860b);
+      color: #1a1a1a;
+      border: 2px solid #d4af37;
+      border-radius: 8px;
+      box-shadow:
+        0 0 8px rgba(212, 175, 55, 0.7),
+        inset 0 0 5px rgba(255, 223, 70, 0.8);
+      
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 700;
+      font-family: 'Georgia', serif;
+      user-select: none;
+    }
+    button:hover,
+    button:focus {
+      background: linear-gradient(145deg, #ffd54f, #ffca28);
+      color: #000;
+      box-shadow:
+        0 0 15px rgba(255, 215, 0, 1),
+        inset 0 0 7px rgba(255, 240, 150, 1);
+      outline: none;
+    }
+    button:active {
+      transform: scale(0.95);
+      box-shadow:
+        0 0 5px rgba(212, 175, 55, 0.5),
+        inset 0 0 3px rgba(255, 223, 70, 0.6);
+    }
+    #controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr); 
+      grid-auto-rows: auto;                  
+      gap: 2rem 1.5rem;                      
+      max-width: 600px;
+      margin: auto;
+      padding-top: 1em;
+    }
+    #controls label
+    #controls .knob {
+      text-align: center;
+    }
+    .control-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+</style>
+</head>
+<body>
+  <p>
+      <b>The Krell Patch</b> ~ is a classic example of a generative synth patch — meaning it creates music or sound textures that evolve and change on their own.<br/>
+      It was originally designed to generate rich, otherworldly sounds automatically, inspired by the eerie sci-fi sounds from the 1950s movie “Forbidden Planet.”<br/>
+      It is like a self-playing sound machine that creates alien, shifting sonic environments, perfect for ambient, experimental, or sci-fi-inspired music.<br/>
+      Press play, listen and tweak some parameters...
+  </p>
+  <canvas id="visualizer"></canvas>
+<button id="start">Play</button>
+  <div id="controls">
+  
+
+  <div class="control-item">
+    <label for="volume">Volume</label>
+    <div class="knob" id="volume"></div>
+  </div>
+
+  <div class="control-item">
+    <label for="pitch">Pitch Spread</label>
+    <div class="knob" id="pitch"></div>
+  </div>
+
+  <div class="control-item">
+    <label for="attack">Attack/Release Spread</label>
+    <div class="knob" id="attack"></div>
+  </div>
+
+  <div class="control-item">
+    <label for="cycle">Cycle Spread</label>
+    <div class="knob" id="cycle"></div>
+  </div>
+
+  <div class="control-item">
+    <label for="noise">Pink Noise Texture</label>
+    <div class="knob" id="noise"></div>
+  </div>
+
+  <div class="control-item">
+    <label for="distortion">Distortion</label>
+    <div class="knob" id="distortion"></div>
+  </div>
+</div>
+
+  <script>
+
+    const canvas = document.getElementById("visualizer");
+    const ctx = canvas.getContext("2d");
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    let masterVol
+    let masterVolInit = -20
+
+    document.getElementById("start").addEventListener("click", async () => {
+      
+      await Tone.start();
+      console.log("Audio Started");
+
+      // ANALYSER & VISUALIZER SETUP
+      const analyser = new Tone.Analyser("waveform", 512);
+
+      // EFFECTS CHAIN
+      const reverb = new Tone.Reverb({ decay: 8, wet: 0.5 });
+      const pingPong = new Tone.PingPongDelay("8n", 0.8);
+      const stereo = new Tone.StereoWidener(0.5);
+      const distortion = new Tone.Distortion(0.8); //TODO auch als dial 
+      masterVol = new Tone.Volume(masterVolInit);
+      masterVol.chain(stereo, distortion, pingPong, reverb, analyser, Tone.Destination);
+
+      // NOISE
+      const noise = new Tone.Noise("pink").start();
+      const noiseVol = new Tone.Volume(-40);
+      const filter = new Tone.Filter({ frequency: 500, Q: 1, type: "lowpass" });
+      const panner = new Tone.Panner(0);
+      noise.chain(noiseVol, filter, panner, masterVol);
+
+      // VOICE 1
+      const synth1 = new Tone.Synth({
+        oscillator: { type: "sine" },
+        envelope: { attack: 2, decay: 1, sustain: 0.3, release: 4 }
+      });
+      const filter1 = new Tone.Filter({ frequency: 500, Q: 1, type: "lowpass" });
+      const panner1 = new Tone.Panner(0);
+      synth1.chain(filter1, panner1, masterVol);
+
+      // VOICE 2
+      const synth2 = new Tone.FMSynth({
+        modulationIndex: 5,
+        harmonicity: 2,
+        envelope: { attack: 0.5, decay: 1.5, sustain: 0.2, release: 3 },
+        modulationEnvelope: { attack: 0.2, decay: 0.3, sustain: 0.9, release: 1.2 }
+      });
+      const filter2 = new Tone.Filter({ frequency: 1000, Q: 2, type: "bandpass" });
+      const panner2 = new Tone.Panner(0);
+      synth2.chain(filter2, panner2, masterVol);
+
+      // LFOs
+      const panLFO1 = new Tone.LFO("0.05Hz", -0.7, 0.7).connect(panner1.pan).start();
+      const panLFO2 = new Tone.LFO("0.03Hz", -0.5, 0.5).connect(panner2.pan).start();
+      const panLFO3 = new Tone.LFO("0.04Hz", -0.3, 0.3).connect(panner.pan).start();
+      const filterLFO1 = new Tone.LFO("0.01Hz", 200, 1200).connect(filter1.frequency).start();
+      const filterLFO2 = new Tone.LFO("0.008Hz", 500, 3000).connect(filter2.frequency).start();
+      const filterLFO3 = new Tone.LFO("0.5Hz", 200, 3000).connect(filter.frequency).start();
+
+      // SCALE & PITCH
+      const scale = ["C3", "D3", "Eb3", "G3", "A3", "Bb3", "C4", "D4", "Eb4", "Bb4", "C5", "D5", "Eb5"];
+      let pitchSpread = 13;
+
+      let currentNoteRange = [];
+
+      function updateNoteRange() {
+        const base = 2;
+        const start = Math.max(0, base);
+        const end = Math.min(scale.length - 1, base + pitchSpread - 1);
+        currentNoteRange = scale.slice(start, end + 1);
+      }
+      updateNoteRange();
+
+      function triggerVoice(synth, time) {
+        const note = currentNoteRange[Math.floor(Math.random() * currentNoteRange.length)];
+
+        const duration = Math.random() * 2 + 1;
+        synth.envelope.attack = Math.random() * 2 + 0.5; // TODO one control here, narrowness inkl. 0 am Ende
+        synth.envelope.release = Math.random() * 4 + 1; // TODO same control here
+
+        synth.triggerAttackRelease(note, duration, time);
+      }
+
+      function setPitchSpread(newSpread) {
+        pitchSpread = Math.min(newSpread, scale.length);
+        updateNoteRange();
+      }
+
+      const loop1 = new Tone.Loop((time) => {
+        triggerVoice(synth1, time);
+        loop1.interval = Math.random() * 3 + 2; // TODO control here spread  
+      }, 4).start(0);
+
+      const loop2 = new Tone.Loop((time) => {
+        triggerVoice(synth2, time);
+        loop2.interval = Math.random() * 3 + 2; // TODO control here spread
+      }, 2).start(1);
+
+      // START AUDIO
+      Tone.Transport.start();
+
+      // VISUALIZER DRAWING
+
+
+      function draw() {
+        requestAnimationFrame(draw);
+        const freqData = analyser.getValue();
+
+        // Find max freq bin
+        let maxIndex = 0;
+        let maxValue = freqData[0];
+        for (let i = 1; i < freqData.length; i++) {
+          if (freqData[i] > maxValue) {
+            maxValue = freqData[i];
+            maxIndex = i;
+          }
+        }
+
+        const sampleRate = Tone.context.sampleRate;
+        const fftSize = analyser.size;
+        const freqResolution = sampleRate / fftSize;
+        const dominantFreq = maxIndex * freqResolution;
+
+        const minFreq = 20;
+        const maxFreq = 2000;
+        const clampedFreq = Math.min(Math.max(dominantFreq, minFreq), maxFreq);
+        const hue = ((clampedFreq - minFreq) / (maxFreq - minFreq)) * 360 + 400;
+
+        ctx.fillStyle = "rgba(0,0,0,1)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const waveform = analyser.getValue();
+
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = `hsl(${hue}, 80%, 60%, 0.3)`;
+
+        const sliceWidth = canvas.width / waveform.length;
+        let x = 0;
+
+        waveform.forEach(v => {
+          const y = (v + 1) / 2 * canvas.height;
+          ctx.lineTo(x, y);
+          x += sliceWidth;
+        });
+
+        ctx.stroke();
+      }
+
+      draw();
+    });
+
+    // UI BINDINGS
+
+    let dial1 = new Knob({
+        size: "large",
+        type: "LittlePhatty",
+        id: "volume",
+        lowVal: -60,
+        highVal: 0,
+        value: masterVolInit,
+        sensitivity: 0.3,
+        label: false
+      });
+
+      let dial2 = new Knob({
+        size: "large",
+        type: "LittlePhatty",
+        id: "noise",
+        lowVal: -60,
+        highVal: 0,
+        value: -6,
+        sensitivity: 0.3,
+        label: false
+      });
+
+      let dial3 = new Knob({
+        size: "large",
+        type: "LittlePhatty",
+        id: "distortion",
+        lowVal: -60,
+        highVal: 0,
+        value: -6,
+        sensitivity: 0.3,
+        label: false
+      });
+
+      let dial4 = new Knob({
+        size: "large",
+        type: "LittlePhatty",
+        id: "attack",
+        lowVal: -60,
+        highVal: 0,
+        value: -6,
+        sensitivity: 0.3,
+        label: false
+      });
+
+      let dial5 = new Knob({
+        size: "large",
+        type: "LittlePhatty",
+        id: "pitch",
+        lowVal: -60,
+        highVal: 0,
+        value: -6,
+        sensitivity: 0.3,
+        label: false
+      });
+
+      let dial6 = new Knob({
+        size: "large",
+        type: "LittlePhatty",
+        id: "cycle",
+        lowVal: -60,
+        highVal: 0,
+        value: -6,
+        sensitivity: 0.3,
+        label: false
+      });
+
+
+     function knobChanged(id, val) {
+        console.log(`knob with ID: ${id} change to ${val}`);
+        if (id == 'knob1') {
+          masterVol.volume.value = parseFloat(val);
+          console.log(masterVol)
+        }
+
+      // else if (id == knob2) {
+      //   ..do something else
+      // }  
+      }
+
+  </script>
+</body>
+</html>
