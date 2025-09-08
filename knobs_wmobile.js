@@ -139,13 +139,19 @@ function createGlobalEventHandlers() {
     dragging(e);
   });
 
-  document.body.addEventListener("touchmove", function(e) {
-    if (e.touches.length > 0) {
-      e.preventDefault(); // prevents page scroll
-      let touch = e.touches[0];
-      dragging(touch);
-    }
-  }, { passive: false });
+  // document.body.addEventListener("touchmove", function(e) {
+  //   if (e.touches.length > 0) {
+  //     e.preventDefault(); // prevents page scroll
+  //     let touch = e.touches[0];
+  //     dragging(touch);
+  //   }
+  // }, { passive: false });
+  document.body.addEventListener("touchmove", e => {
+  if (e.touches.length > 0 && knobInUse.id !== "") {
+    e.preventDefault(); // Only prevent scrolling when knob is active
+    dragging(e.touches[0]);
+  }
+}, { passive: false });
 
   function resetKnobInUse() {
     knobInUse = {
